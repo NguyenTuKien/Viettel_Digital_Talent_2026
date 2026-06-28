@@ -266,7 +266,7 @@ Thực thi tuần tự các bước sau bằng command line tại local:
     ```
 ### Bước 6: Export API và Test
 * Tạo [manifest](./manifest/04-network/cloudflare.yaml) cho pod Cloudflare tunnel để export API ra Internet (Lưu ý: cấu hình token bảo mật nằm trong file `./manifest/04-network/secret.yaml`).
-```bash
+    ```bash
     ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ kubectl get pods
     NAME                                    READY   STATUS    RESTARTS      AGE
     cloudflared-845d7c844c-qj9zn            1/1     Running   0             4s
@@ -281,30 +281,30 @@ Thực thi tuần tự các bước sau bằng command line tại local:
 * Kết quả:
 ![Output](image.png)
 * Kiểm tra tình trạng GPU hiện tại:
-```bash
-ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ nvidia-smi
-Sun Jun 28 09:58:59 2026       
-+-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
-+-----------------------------------------+------------------------+----------------------+
-| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
-| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
-|                                         |                        |               MIG M. |
-|=========================================+========================+======================|
-|   0  NVIDIA GeForce RTX 3050 ...    Off |   00000000:01:00.0 Off |                  N/A |
-| N/A   51C    P8              9W /   60W |    2757MiB /   4096MiB |      0%      Default |
-|                                         |                        |                  N/A |
-+-----------------------------------------+------------------------+----------------------+
+    ```bash
+    ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ nvidia-smi
+    Sun Jun 28 09:58:59 2026       
+    +-----------------------------------------------------------------------------------------+
+    | NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
+    +-----------------------------------------+------------------------+----------------------+
+    | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+    |                                         |                        |               MIG M. |
+    |=========================================+========================+======================|
+    |   0  NVIDIA GeForce RTX 3050 ...    Off |   00000000:01:00.0 Off |                  N/A |
+    | N/A   51C    P8              9W /   60W |    2757MiB /   4096MiB |      0%      Default |
+    |                                         |                        |                  N/A |
+    +-----------------------------------------+------------------------+----------------------+
 
-+-----------------------------------------------------------------------------------------+
-| Processes:                                                                              |
-|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
-|        ID   ID                                                               Usage      |
-|=========================================================================================|
-|    0   N/A  N/A            1671      G   /usr/lib/xorg/Xorg                        4MiB |
-|    0   N/A  N/A           53460      C   /app/llama-server                      2734MiB |
-+-----------------------------------------------------------------------------------------+
-```
+    +-----------------------------------------------------------------------------------------+
+    | Processes:                                                                              |
+    |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+    |        ID   ID                                                               Usage      |
+    |=========================================================================================|
+    |    0   N/A  N/A            1671      G   /usr/lib/xorg/Xorg                        4MiB |
+    |    0   N/A  N/A           53460      C   /app/llama-server                      2734MiB |
+    +-----------------------------------------------------------------------------------------+
+    ```
 ## 4. Nhận xét
 * **Về tính năng DRA**: Dynamic Resource Allocation tách biệt hoàn toàn vòng đời của thiết bị (ResourceClaim) ra khỏi Pod, giúp việc cấp phát tài nguyên AI linh hoạt và chủ động hơn nhiều so với Node Affinity hay Taints/Tolerations.
 * **Về tối ưu tài nguyên**: KServe RawDeployment kết hợp với K3s là chiến lược phù hợp nhất cho môi trường laptop có 4GB VRAM. Nó giải quyết được bài toán hao phí tài nguyên nền ("High CPU/memory usage") thường gặp khi triển khai hệ thống AI.
