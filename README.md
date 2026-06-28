@@ -226,11 +226,11 @@ Thực thi tuần tự các bước sau bằng command line tại local:
     NAME           AGE
     gpu-template   8m54s
     ```
-* (Tùy chọn) Khai báo [manifest](./manifest/01-dra/resourceclaim.yaml) định nghĩa `ResourceClaim` thủ công để xin cấp phát GPU từ `ResourceClaimTemplate` (Thực tế KServe sẽ tự động làm việc này thông qua InferenceService).
+* **Lưu ý:** Trong kiến trúc DRA kết hợp KServe này, ta không cần tự tạo `ResourceClaim` thủ công. Thay vào đó, KServe (thông qua InferenceService) sẽ tự động gọi `ResourceClaimTemplate` để sinh ra các `ResourceClaim` động gắn liền với vòng đời của từng Pod. Bạn có thể kiểm chứng bằng lệnh:
     ```bash
     ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ kubectl get resourceclaims
-    NAME           AGE
-    gpu-claim      8m54s
+    NAME                                              STATE                AGE
+    llama-qwen-predictor-57685c8575-h5bbx-gpu-5bfmc   allocated,reserved   85m
     ```
 ### Bước 5: Deploy Model & Expose API
 * Tạo [manifest](./manifest/02-storage/persistentvolume.yaml) định nghĩa `PersistentVolume` (hostPath) để mount trực tiếp thư mục chứa model trên ổ cứng laptop vào container.
@@ -262,7 +262,7 @@ Thực thi tuần tự các bước sau bằng command line tại local:
     llama-qwen   http://llama-qwen-default.example.com   True                                                                  27m
     ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ kubectl get pods
     NAME                                    READY   STATUS    RESTARTS      AGE
-    llama-qwen-predictor-57685c8575-h5bbx   1/1     Running   9 (14m ago)   30m27m
+    llama-qwen-predictor-57685c8575-h5bbx   1/1     Running   9 (14m ago)   30m
     ```
 ### Bước 6: Export API và Test
 * Tạo [manifest](./manifest/04-network/cloudflare.yaml) cho pod Cloudflare tunnel để export API ra Internet (Lưu ý: cấu hình token bảo mật nằm trong file `./manifest/04-network/secret.yaml`).
