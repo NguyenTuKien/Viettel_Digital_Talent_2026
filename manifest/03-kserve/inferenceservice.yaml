@@ -1,0 +1,24 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-qwen
+  namespace: default
+spec:
+  predictor:
+    resourceClaims:
+      - name: gpu
+        resourceClaimTemplateName: gpu-template
+    model:
+      modelFormat:
+        name: gguf
+      runtime: llama-cpp-runtime
+      storageUri: "pvc://llama-models"
+      resources:
+        claims:
+          - name: gpu
+        requests:
+          cpu: "2"
+          memory: "4Gi"
+        limits:
+          cpu: "4"
+          memory: "8Gi"

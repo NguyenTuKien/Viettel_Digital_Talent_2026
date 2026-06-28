@@ -1,0 +1,34 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: llama-cpp-runtime
+  namespace: default
+spec:
+  supportedModelFormats:
+    - name: gguf
+      version: "1"
+      autoSelect: true
+  containers:
+    - name: kserve-container
+      image: ghcr.io/ggml-org/llama.cpp:server-cuda
+      args:
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --model
+        - /mnt/models/model.gguf
+        - -ngl
+        - "20"
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+      resources:
+        claims:
+          - name: gpu
+        requests:
+          cpu: "2"
+          memory: "4Gi"
+        limits:
+          cpu: "4"
+          memory: "8Gi"
