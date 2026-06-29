@@ -9,6 +9,7 @@ Mục tiêu cốt lõi của lab là giải quyết bài toán Resource Placemen
 * Model Serving: KServe cấu hình ở chế độ RawDeployment (loại bỏ các thành phần serverless như Knative/Istio) để tiết kiệm tối đa RAM hệ thống.
 
 ## 2. Setup
+### 2.1. Cấu hình phần cứng & phần mềm
 Hệ thống được thiết kế để chạy trực tiếp trên laptop cá nhân. Cấu hình phần cứng và phần mềm yêu cầu:
 * CPU: >= 4 Cores.
 * RAM hệ thống: >= 16GB (Quan trọng để tránh lỗi OOM khi load model weight).
@@ -18,6 +19,30 @@ Hệ thống được thiết kế để chạy trực tiếp trên laptop cá n
   - NVIDIA Container Toolkit & Drivers bản mới nhất.
   - kubectl, helm.
   - Cursor hoặc bất kỳ code editor nào để chỉnh sửa manifest.
+
+### 2.2. Tính toán
+* Số tham số mô hình (Model Parameters): 0.5 tỷ * 2 byte mỗi tham số = 1GB VRAM.
+* Bộ kích hoạt và bộ nhớ đệm KV (Activation & KV Cache): 
+    * Với Batch size = 1 và Sequence length = 2048
+* Qwen 1.5-0.5B-Chat GGUF (Quantized 4-bit):
+    * L (Số lớp) = 24
+    * N_kv (Số Key/Value Heads) = 16 (Vì model này dùng Multi-Head Attention, số KV heads bằng số Q heads, không phải GQA)
+    * D_kv (Kích thước mỗi head) = 64 (vì hidden_size = 1024 / 16 = 64)
+    * Kiểu dữ liệu KV Cache = FP16 → C_B = 2 bytes
+
+&rArr; Kích thước KV Cache = L * N_kv * D_kv * C_B * Sequence length = 2 * 24 * 16 * 64 * 2 * 2048 = 192.0 MB.
+* Các activation khác (ngoài KV Cache) có thể tiêu tốn thêm tài nguyên. (ước tính 1GB)
+* Phần ngữ cảnh (Overhead) cho KServe, DRA Driver, và các Pod khác: ~1GB.
+* Hệ số X, Y, Z (dùng để ước tính tổng VRAM thực tế cần thiết):
+    * X = 5–20% (0.05–0.2): Overhead activation trung gian — bộ nhớ tạm thời llama.cpp cần "nháp" trong mỗi lần tính toán (attention scores, MLP intermediate outputs), ngoài KV Cache. Model càng nhỏ thì X càng nhỏ.
+    * Y = 10–30% (0.1–0.3): Overhead hệ thống — bộ nhớ CUDA runtime, memory allocator và memory fragmentation của framework (llama.cpp, KServe).
+    * Z = 5% (0.05): VRAM bị GPU driver giữ lại — phần VRAM vật lý không thể dùng cho model (GPU 4GB thực tế chỉ còn ~3.8GB khả dụng).
+* Tổng ước tính VRAM thực tế cần (theo công thức):
+    * `(Model + KV + Activations) × (1+X)  +  Overhead × (1+Y)  +  GPU_total × Z`
+    * `= (1 + 0.192 + ~0.1) GB × (1 + 0.05)  +  1 GB × (1 + 0.10)  +  4 GB × 0.05`
+    * `= 1.292 × 1.05  +  1.0 × 1.10  +  0.20`
+    * `≈ 1.36 + 1.10 + 0.20 ≈ **2.66 GB** (X=5%, Y=10% – trường hợp tối ưu)`
+    * Dải đầy đủ (X: 5–20%, Y: 10–30%): **2.66 – 3.05 GB < 4 GB GPU**
 
 ## 3. Triển khai
 Thực thi tuần tự các bước sau bằng command line tại local:
@@ -91,101 +116,6 @@ Thực thi tuần tự các bước sau bằng command line tại local:
     NAME                                       NODE       DRIVER                      POOL       AGE
     ngtukien-compute-domain.nvidia.com-cwc7f   ngtukien   compute-domain.nvidia.com   ngtukien   11m
     ngtukien-gpu.nvidia.com-56wm7              ngtukien   gpu.nvidia.com              ngtukien   11m
-    ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ kubectl describe resourceslice ngtukien-compute-domain.nvidia.com-cwc7f
-    Name:         ngtukien-compute-domain.nvidia.com-cwc7f
-    Namespace:    
-    Labels:       <none>
-    Annotations:  <none>
-    API Version:  resource.k8s.io/v1
-    Kind:         ResourceSlice
-    Metadata:
-    Creation Timestamp:  2026-06-27T16:12:27Z
-    Generate Name:       ngtukien-compute-domain.nvidia.com-
-    Generation:          1
-    Owner References:
-        API Version:     v1
-        Controller:      true
-        Kind:            Node
-        Name:            ngtukien
-        UID:             a32f1fab-dde0-4022-96d1-a1b880b4d6a6
-    Resource Version:  2499
-    UID:               93d72b06-5708-4a0d-bf2c-be5876c45c48
-    Spec:
-    Devices:
-        Attributes:
-        Id:
-            Int:  0
-        Type:
-            String:  daemon
-        Name:        daemon-0
-        Attributes:
-        Id:
-            Int:  0
-        Type:
-            String:  channel
-        Name:        channel-0
-    Driver:        compute-domain.nvidia.com
-    Node Name:     ngtukien
-    Pool:
-        Generation:            1
-        Name:                  ngtukien
-        Resource Slice Count:  1
-    Events:                    <none>
-    ngtukien@NgTuKien:~/Documents/VDT_2026/15.Report$ kubectl describe resourceslice ngtukien-gpu.nvidia.com-56wm7 
-    Name:         ngtukien-gpu.nvidia.com-56wm7
-    Namespace:    
-    Labels:       <none>
-    Annotations:  <none>
-    API Version:  resource.k8s.io/v1
-    Kind:         ResourceSlice
-    Metadata:
-    Creation Timestamp:  2026-06-27T16:12:26Z
-    Generate Name:       ngtukien-gpu.nvidia.com-
-    Generation:          1
-    Owner References:
-        API Version:     v1
-        Controller:      true
-        Kind:            Node
-        Name:            ngtukien
-        UID:             a32f1fab-dde0-4022-96d1-a1b880b4d6a6
-    Resource Version:  2497
-    UID:               20f878c8-bc73-4a15-83ae-e65073905768
-    Spec:
-    Devices:
-        Attributes:
-        Addressing Mode:
-            String:  None
-        Architecture:
-            String:  Ampere
-        Brand:
-            String:  GeForce
-        Cuda Compute Capability:
-            Version:  8.6.0
-        Cuda Driver Version:
-            Version:  13.0.0
-        Driver Version:
-            Version:  580.142.0
-        Product Name:
-            String:  NVIDIA GeForce RTX 3050 Laptop GPU
-        resource.kubernetes.io/pciBusID:
-            String:  0000:01:00.0
-        resource.kubernetes.io/pcieRoot:
-            String:  pci0000:00
-        Type:
-            String:  gpu
-        Uuid:
-            String:  GPU-0fed1b63-4733-e6e1-11d2-623625158ad2
-        Capacity:
-        Memory:
-            Value:  4Gi
-        Name:       gpu-0
-    Driver:       gpu.nvidia.com
-    Node Name:    ngtukien
-    Pool:
-        Generation:            1
-        Name:                  ngtukien
-        Resource Slice Count:  1
-    Events:                    <none>
     ```
 ### Bước 3: Cấu hình KServe Minimal
 * Thêm `cert-manager`:
@@ -306,6 +236,11 @@ Thực thi tuần tự các bước sau bằng command line tại local:
     +-----------------------------------------------------------------------------------------+
     ```
 ## 4. Nhận xét
-* **Về tính năng DRA**: Dynamic Resource Allocation tách biệt hoàn toàn vòng đời của thiết bị (ResourceClaim) ra khỏi Pod, giúp việc cấp phát tài nguyên AI linh hoạt và chủ động hơn nhiều so với Node Affinity hay Taints/Tolerations.
-* **Về tối ưu tài nguyên**: KServe RawDeployment kết hợp với K3s là chiến lược phù hợp nhất cho môi trường laptop có 4GB VRAM. Nó giải quyết được bài toán hao phí tài nguyên nền ("High CPU/memory usage") thường gặp khi triển khai hệ thống AI.
-* **Tính ứng dụng**: Mặc dù được thiết kế chạy trên 1 node (laptop), mô hình này tuân thủ nguyên tắc "Application-Infrastructure Separation" và có thể áp dụng thẳng lên môi trường thực tế nhiều Node/GPU mà không cần thay đổi kiến trúc cốt lõi.
+### Dynamic Resource Allocation
+* Các thành phần:
+    * **ResourceDriver (DRA Driver)**: Plugin thực hiện việc giao tiếp giữa Kubernetes và phần cứng (GPU, FPGA, v.v.), chịu trách nhiệm cấp phát và thu hồi tài nguyên.
+    * **ResourceSlice**: Định nghĩa một "lát cắt" (slice) tài nguyên khả dụng trên một node. Ví dụ: một GPU có thể được chia thành nhiều "slice" nhỏ hơn.
+    * **DeviceClass**: Định nghĩa loại tài nguyên (ở đây là GPU NVIDIA) bằng các selector dựa trên nhãn (labels) hoặc thông tin từ `kubelet`.
+    * **ResourceClaimTemplate**: Mẫu (template) để sinh ra `ResourceClaim` khi cần. Khi KServe yêu cầu tài nguyên, DRA sẽ dùng template này để tạo ra một `ResourceClaim` cụ thể.
+    * **ResourceClaim**: Thực tế xin cấp phát tài nguyên cho một Pod cụ thể.
+    
